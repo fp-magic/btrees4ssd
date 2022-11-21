@@ -1,0 +1,7 @@
+cd ~/Desktop/pibench/build
+make clean
+make
+export LD_LIBRARY_PATH=~/Desktop/pibench/build
+./src/PiBench libstlmap_wrapper.so --pcm=false
+./src/PiBench btree_wrapper.so --pcm=false
+
