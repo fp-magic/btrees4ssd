@@ -7,12 +7,13 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
+add_definitions(-w)
 if(COMPILER_SUPPORTS_MARCH_NATIVE)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
 endif()
 
 option(PIBENCH_BUILD_LEVELDB "Build LevelDB wrapper" OFF)
-set(PIBENCH_BUILD_LEVELDB ON)
+
 include(CTest)
 
 find_package(OpenMP REQUIRED)
@@ -62,3 +63,4 @@ endif(PIBENCH_BUILD_LEVELDB)
 add_library(dummy_wrapper SHARED wrappers/dummy/dummy_wrapper.cpp)
 add_library(stlmap_wrapper SHARED wrappers/stlmap/stlmap_wrapper.cpp)
 add_library(btree_wrapper SHARED wrappers/btree/btree_wrapper.cpp)
+add_library(buffertree_wrapper SHARED wrappers/buffertree/buffertree_wrapper.cpp)
