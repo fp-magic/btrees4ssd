@@ -34,12 +34,14 @@ public:
         uint32_t num_buf;
         Key buf_key[4096 / 2 / (sizeof(Key) + sizeof(T)) - 1];
         T buf_val[4096 / 2 / (sizeof(Key) + sizeof(T)) - 1];
+        char padding[8];
     };
     struct btree_data
     {
         Key key[4096 / (sizeof(Key) + sizeof(T)) - 1];
         T val[4096 / (sizeof(Key) + sizeof(T)) - 1];
         uint32_t num_item;
+        char padding[4];
     };
     void spill(uint32_t cur_id, btree_node *pnode);
 
@@ -54,8 +56,6 @@ private:
     uint32_t data_cap = 4096 / (sizeof(Key) + sizeof(T)) - 1;
     std::vector<FILE *> nodes;
     std::vector<bool> is_leaf;
-    std::vector<std::shared_mutex *> small_mutex;
-    std::vector<std::shared_mutex *> large_mutex;
     std::shared_mutex print_mutex, print_small_mutex;
     std::shared_mutex new_mutex;
     uint32_t root_id;
@@ -64,11 +64,8 @@ private:
     {
         btree_node *node = new btree_node;
         size_t state;
-        {
-            std::unique_lock lock(*small_mutex[id]);
-            rewind(nodes[id]);
-            state = fread(node, sizeof(btree_node), 1, nodes[id]);
-        }
+        rewind(nodes[id]);
+        state = fread(node, sizeof(btree_node), 1, nodes[id]);
         if (state != 1)
         {
             fprintf(stderr, "btree: I/O error in get_node\n");
@@ -81,12 +78,8 @@ private:
     void set_node(uint32_t id, btree_node *node)
     {
         size_t state;
-        {
-            std::unique_lock lock(*small_mutex[id]);
-            rewind(nodes[id]);
-            state = fwrite(node, sizeof(btree_node), 1, nodes[id]);
-        }
-
+        rewind(nodes[id]);
+        state = fwrite(node, sizeof(btree_node), 1, nodes[id]);
         delete node;
 
         if (state != 1)
@@ -104,8 +97,6 @@ private:
         std::string file_name = "./btree/btree_node_" + std::to_string(id);
         nodes.push_back(fopen(file_name.c_str(), "w+b"));
         is_leaf.push_back(false);
-        small_mutex.push_back(new std::shared_mutex);
-        large_mutex.push_back(new std::shared_mutex);
         if (node == nullptr)
         {
             node = new btree_node;
@@ -124,11 +115,8 @@ private:
 
         btree_data *data = new btree_data;
         size_t state;
-        {
-            std::unique_lock lock(*small_mutex[id]);
-            rewind(nodes[id]);
-            state = fread(data, sizeof(btree_data), 1, nodes[id]);
-        }
+        rewind(nodes[id]);
+        state = fread(data, sizeof(btree_data), 1, nodes[id]);
         if (state != 1)
         {
             fprintf(stderr, "btree: I/O error in get_data\n");
@@ -140,11 +128,8 @@ private:
     void set_data(uint32_t id, btree_data *data)
     {
         size_t state;
-        {
-            std::unique_lock lock(*small_mutex[id]);
-            rewind(nodes[id]);
-            state = fwrite(data, sizeof(btree_data), 1, nodes[id]);
-        }
+        rewind(nodes[id]);
+        state = fwrite(data, sizeof(btree_data), 1, nodes[id]);
 
         delete data;
 
@@ -163,8 +148,6 @@ private:
         std::string file_name = "./btree/btree_data_" + std::to_string(id);
         nodes.push_back(fopen(file_name.c_str(), "w+b"));
         is_leaf.push_back(true);
-        small_mutex.push_back(new std::shared_mutex);
-        large_mutex.push_back(new std::shared_mutex);
         if (data == nullptr)
         {
             data = new btree_data;
@@ -445,10 +428,6 @@ buffertree_wrapper<Key, T>::~buffertree_wrapper()
     {
         fclose(node);
     }
-    for (auto m : small_mutex)
-    {
-        delete m;
-    }
 }
 
 template <typename Key, typename T>
@@ -456,7 +435,7 @@ bool buffertree_wrapper<Key, T>::find(const char *key, size_t key_sz, char *valu
 {
 
     Key k = *reinterpret_cast<Key *>(const_cast<char *>(key));
-    //printf("find %lld\n", k);
+    // printf("find %lld\n", k);
     int cur_id = root_id;
     T v;
     while (!is_leaf[cur_id])
@@ -491,22 +470,22 @@ bool buffertree_wrapper<Key, T>::insert(const char *key, size_t key_sz, const ch
 {
     Key k = *reinterpret_cast<Key *>(const_cast<char *>(key));
     T v = *reinterpret_cast<T *>(const_cast<char *>(value));
-    //printf("=======insert========%12lld %12lld\n", k, v);
-    // print_state(root_id, true);
+    // printf("=======insert========%12lld %12lld\n", k, v);
+    //  print_state(root_id, true);
     uint32_t cur_id = root_id;
     btree_node *node = get_node(cur_id);
     node->buf_key[node->num_buf] = k;
     node->buf_val[node->num_buf] = v;
     ++node->num_buf;
-    //printf("0\n");
+    // printf("0\n");
     if (node->num_buf == node_buf_cap)
     {
-        //printf("1\n");
+        // printf("1\n");
         spill(root_id, node);
-        //printf("2\n");
+        // printf("2\n");
         if (node->num_item == node_cap)
         { // change root
-            //printf("3\n");
+            // printf("3\n");
             btree_node *root_node = new btree_node;
             root_node->nxt[0] = root_id;
             root_node->num_item = 1;
@@ -515,10 +494,10 @@ bool buffertree_wrapper<Key, T>::insert(const char *key, size_t key_sz, const ch
             root_id = init_new_node(root_node);
         }
     }
-    //printf("4\n");
+    // printf("4\n");
     set_node(cur_id, node);
-    //if (cur_id != root_id)
-       // print_state(root_id, true);
+    // if (cur_id != root_id)
+    //  print_state(root_id, true);
     return true;
 }
 
